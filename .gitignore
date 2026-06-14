@@ -1,0 +1,11 @@
+target/
+dbt_packages/
+logs/
+mrr_analytics.duckdb
+mrr_analytics.duckdb.wal
+.venv/
+__pycache__/
+
+# DuckDB
+*.duckdb
+*.duckdb.wal

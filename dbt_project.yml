@@ -1,0 +1,20 @@
+name: 'mrr_analytics'
+version: '1.0.0'
+
+profile: 'mrr_analytics'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  mrr_analytics:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+
+

@@ -1,0 +1,15 @@
+version: 2
+
+exposures:
+  - name: mrr_executive_dashboard
+    description: >
+      Executive dashboard tracking Monthly Recurring Revenue by use case and geography.
+      Used by leadership for strategic planning and investor reporting.
+    type: dashboard
+    maturity: medium
+    owner:
+      name: Analytics Engineering
+      email: analytics@example.com
+    depends_on:
+      - ref('fct_mrr')
+      - ref('fct_mrr_movements')

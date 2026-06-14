@@ -1,0 +1,65 @@
+version: 2
+
+models:
+  - name: stg_invoices
+    description: Cleaned invoices with typed columns. Includes credit notes (negative amounts).
+    columns:
+      - name: invoice_id
+        data_tests:
+          - unique
+          - not_null
+      - name: customer_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: subscription_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_subscriptions')
+              field: subscription_id
+      - name: product_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_products')
+              field: product_id
+
+  - name: stg_customers
+    description: Cleaned customer accounts.
+    columns:
+      - name: customer_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_products
+    description: Cleaned product catalog.
+    columns:
+      - name: product_id
+        data_tests:
+          - unique
+          - not_null
+
+  - name: stg_subscriptions
+    description: Cleaned subscriptions.
+    columns:
+      - name: subscription_id
+        data_tests:
+          - unique
+          - not_null
+      - name: school_id
+        data_tests:
+          - relationships:
+              to: ref('stg_schools')
+              field: school_id
+
+  - name: stg_schools
+    description: Cleaned schools with use case classification.
+    columns:
+      - name: school_id
+        data_tests:
+          - unique
+          - not_null

@@ -1,0 +1,63 @@
+unit_tests:
+  - name: test_annual_invoice_distributes_evenly
+    description: >
+      A $1,200 annual invoice spanning 12 months should produce $100 per month.
+    model: int_invoice_monthly_amortized
+    given:
+      - input: ref('stg_invoices')
+        rows:
+          - { invoice_id: 'inv_test_001', customer_id: 'cust_001', subscription_id: 'sub_001', product_id: 'prod_001', invoice_date: '2024-01-15', billing_start_date: '2024-01-01', billing_end_date: '2025-01-01', amount_usd: 1200.00 }
+      - input: ref('stg_products')
+        rows:
+          - { product_id: 'prod_001', product_name: 'Annual Plan', billing_frequency: 'annual' }
+    expect:
+      rows:
+        - { invoice_id: 'inv_test_001', month: '2024-01-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-02-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-03-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-04-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-05-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-06-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-07-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-08-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-09-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-10-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-11-01', mrr_usd: 100.00, months_covered: 12 }
+        - { invoice_id: 'inv_test_001', month: '2024-12-01', mrr_usd: 100.00, months_covered: 12 }
+
+  - name: test_quarterly_invoice_distributes_over_3_months
+    description: >
+      A $300 quarterly invoice should produce $100 per month for 3 months.
+    model: int_invoice_monthly_amortized
+    given:
+      - input: ref('stg_invoices')
+        rows:
+          - { invoice_id: 'inv_test_002', customer_id: 'cust_001', subscription_id: 'sub_001', product_id: 'prod_002', invoice_date: '2024-04-01', billing_start_date: '2024-04-01', billing_end_date: '2024-07-01', amount_usd: 300.00 }
+      - input: ref('stg_products')
+        rows:
+          - { product_id: 'prod_002', product_name: 'Quarterly Plan', billing_frequency: 'quarterly' }
+    expect:
+      rows:
+        - { invoice_id: 'inv_test_002', month: '2024-04-01', mrr_usd: 100.00, months_covered: 3 }
+        - { invoice_id: 'inv_test_002', month: '2024-05-01', mrr_usd: 100.00, months_covered: 3 }
+        - { invoice_id: 'inv_test_002', month: '2024-06-01', mrr_usd: 100.00, months_covered: 3 }
+
+  - name: test_credit_note_distributes_as_negative
+    description: >
+      A credit note of -$600 over 6 months should produce -$100 per month.
+    model: int_invoice_monthly_amortized
+    given:
+      - input: ref('stg_invoices')
+        rows:
+          - { invoice_id: 'inv_test_003', customer_id: 'cust_001', subscription_id: 'sub_001', product_id: 'prod_003', invoice_date: '2024-03-15', billing_start_date: '2024-01-01', billing_end_date: '2024-07-01', amount_usd: -600.00 }
+      - input: ref('stg_products')
+        rows:
+          - { product_id: 'prod_003', product_name: 'Semi-Annual Plan', billing_frequency: 'annual' }
+    expect:
+      rows:
+        - { invoice_id: 'inv_test_003', month: '2024-01-01', mrr_usd: -100.00, months_covered: 6 }
+        - { invoice_id: 'inv_test_003', month: '2024-02-01', mrr_usd: -100.00, months_covered: 6 }
+        - { invoice_id: 'inv_test_003', month: '2024-03-01', mrr_usd: -100.00, months_covered: 6 }
+        - { invoice_id: 'inv_test_003', month: '2024-04-01', mrr_usd: -100.00, months_covered: 6 }
+        - { invoice_id: 'inv_test_003', month: '2024-05-01', mrr_usd: -100.00, months_covered: 6 }
+        - { invoice_id: 'inv_test_003', month: '2024-06-01', mrr_usd: -100.00, months_covered: 6 }

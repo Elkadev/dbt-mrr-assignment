@@ -1,0 +1,76 @@
+version: 2
+
+models:
+  - name: fct_mrr
+    description: >
+      Monthly Recurring Revenue aggregated by school use case and customer country.
+      Revenue is distributed proportionally across the months covered by each invoice.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - month
+            - use_case
+            - country
+    columns:
+      - name: month
+        description: First day of the calendar month.
+        data_tests:
+          - not_null
+      - name: use_case
+        description: School use case.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['b2b_course_sellers', 'b2c_course_sellers', 'customer_training', 'corporate_training', 'government_ngos']
+      - name: country
+        description: Country of the customer entity.
+        data_tests:
+          - not_null
+      - name: mrr_usd
+        description: Total Monthly Recurring Revenue in USD.
+        data_tests:
+          - not_null
+
+  - name: fct_mrr_movements
+    description: >
+      MRR movement analysis showing how revenue changes month-over-month.
+      Categorizes each customer's MRR change as new, expansion, contraction,
+      reactivation, or retained.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - month
+            - use_case
+            - country
+            - mrr_movement
+    columns:
+      - name: month
+        description: First day of the calendar month.
+        data_tests:
+          - not_null
+      - name: use_case
+        description: School use case.
+        data_tests:
+          - not_null
+      - name: country
+        description: Country of the customer entity.
+        data_tests:
+          - not_null
+      - name: mrr_movement
+        description: Type of MRR change (new, expansion, contraction, reactivation, retained).
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ['new', 'expansion', 'contraction', 'reactivation', 'retained']
+      - name: customer_count
+        description: Number of distinct customers in this movement category.
+        data_tests:
+          - not_null
+      - name: mrr_change_usd
+        description: Net MRR change in USD for this group.
+        data_tests:
+          - not_null
+      - name: mrr_usd
+        description: Total MRR in USD for this group.
+        data_tests:
+          - not_null

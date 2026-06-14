@@ -1,0 +1,6 @@
+mrr_analytics:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'mrr_analytics.duckdb'

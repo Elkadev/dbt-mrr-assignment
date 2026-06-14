@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: int_invoice_monthly_amortized
+    description: >
+      Each invoice expanded into one row per calendar month it covers,
+      with the amount distributed proportionally. Credit notes (negative amounts)
+      are distributed the same way, reducing MRR in the affected months.
+    columns:
+      - name: invoice_id
+        description: Original invoice identifier (not unique — one invoice produces multiple rows).
+        data_tests:
+          - not_null
+      - name: month
+        description: First day of the calendar month this revenue is attributed to.
+        data_tests:
+          - not_null
+      - name: mrr_usd
+        description: Monthly portion of invoice amount (amount_usd / months_covered).
+        data_tests:
+          - not_null
