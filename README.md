@@ -53,7 +53,12 @@ mrr_analytics/
 ├── tests/
 │   ├── unit/
 │   │   └── test_amortization_logic.yml
-│   └── assert_amortized_revenue_reconciles.sql
+│   ├── assert_amortized_revenue_reconciles.sql
+│   ├── assert_billing_dates_valid.sql
+│   ├── assert_month_within_billing_period.sql
+│   ├── assert_row_count_matches_months_covered.sql
+│   ├── assert_negative_mrr_only_from_credits.sql
+│   └── assert_staging_counts_match_seeds.sql
 ├── screenshots/
 ├── dbt_project.yml
 ├── profiles.yml
@@ -158,13 +163,21 @@ An invoice spanning 12 months produces 12 rows — one per calendar month it cov
 | `product_id` | varchar | Product billed |
 | `months_covered` | integer | Number of months spanned by invoice |
 | `month` | date | Calendar month this row is attributed to |
-| `mrr_usd` | decimal | Monthly portion: `amount_usd / months_covered` |
+| `mrr_usd` | decimal | Monthly portion: `amount_usd / months_covered` (rounding remainder allocated to last month) |
 
 **Example:**
 
 ```
-Input:  Invoice $1,200 | start: 2024-01-01 | end: 2025-01-01
+Input:  Invoice $1,200 | start: 2024-01-01 | end: 2024-12-31
 Output: 12 rows, each with mrr_usd = $100
+```
+
+**Rounding Example:**
+
+```
+Input:  Invoice $100 | start: 2024-01-01 | end: 2024-03-31 | months_covered = 3
+Output: Jan = $33.33, Feb = $33.33, Mar = $33.34 (remainder allocated to last month)
+Total:  $33.33 + $33.33 + $33.34 = $100.00 ✅ (exact reconciliation)
 ```
 
 ---
@@ -178,9 +191,13 @@ Output: 12 rows, each with mrr_usd = $100
 **Solution:** Distribute each invoice's `amount_usd` proportionally:
 
 ```
-MRR per month = amount_usd / months_covered
-months_covered = datediff('month', billing_start_date, billing_end_date)
+months_covered = datediff('month', billing_start_date, billing_end_date) + 1
+MRR per month = round(amount_usd / months_covered, 2)
 ```
+
+The `+ 1` ensures inclusive month counting (Jan 1 to Mar 31 = 3 months, not 2).
+
+**Rounding fix:** To prevent revenue leakage from rounding (e.g., $100 / 3 = $33.33 × 3 = $99.99), the remainder is allocated to the last month using `ROW_NUMBER() ... ORDER BY month DESC`. This ensures `SUM(mrr_usd) = amount_usd` for every invoice.
 
 **Why `datediff` instead of the `billing_frequency` label?**
 - The label says "annual" but actual dates might span 11 or 13 months
@@ -195,9 +212,9 @@ months_covered = datediff('month', billing_start_date, billing_end_date)
 
 **Alternative rejected:** Assigning full credit to `invoice_date` month — distorts time series for multi-month adjustments.
 
-### 3. Invoices with `months_covered = 0`
+### 3. Invoices with `months_covered < 1`
 
-**Decision:** Excluded (`WHERE months_covered > 0`).
+**Decision:** Excluded (`WHERE months_covered >= 1`).
 
 **Why:** Prevents division by zero. These represent same-day adjustments or data entry errors (<1% of records).
 
@@ -234,7 +251,9 @@ months_covered = datediff('month', billing_start_date, billing_end_date)
 ### Overview
 
 ```
-Total: 36 data tests + 3 unit tests + 1 reconciliation test = 40 tests
+Schema tests (unique, not_null, relationships, accepted_values) + 
+Custom singular tests (reconciliation, date validation, row counts) + 
+Unit tests (amortization logic) 
 All passing ✅
 ```
 
@@ -247,6 +266,7 @@ Validate the **amortization logic** with controlled inputs and expected outputs:
 | `test_annual_invoice_distributes_evenly` | $1,200 / 12 months = $100/month |
 | `test_quarterly_invoice_distributes_over_3_months` | $300 / 3 months = $100/month |
 | `test_credit_note_distributes_as_negative` | -$600 / 6 months = -$100/month |
+| `test_rounding_remainder_goes_to_last_month` | $100 / 3 = $33.33 + $33.33 + $33.34 |
 
 **Why unit tests?** Other tests check data quality. Unit tests check **logic correctness**. Even if data changes completely, these prove the transformation engine works.
 
@@ -254,12 +274,23 @@ Validate the **amortization logic** with controlled inputs and expected outputs:
 
 Verifies:
 ```
-SUM(amortized mrr_usd) ≈ SUM(original invoice amount_usd)
+SUM(amortized mrr_usd) = SUM(original invoice amount_usd)
 ```
 
-Proves no revenue is lost or created during amortization. Tolerance of $25 allowed for rounding across ~2,500 invoices.
+Proves no revenue is lost or created during amortization. Tolerance of $0.01 — the rounding remainder fix ensures near-exact reconciliation.
 
-### 3. Primary Key Tests
+### 3. Custom Singular Tests
+
+| Test | What It Validates |
+|------|-------------------|
+| `assert_amortized_revenue_reconciles` | Total amortized MRR = total invoiced amount (±$0.01) |
+| `assert_billing_dates_valid` | No invoice has billing_end_date before billing_start_date |
+| `assert_month_within_billing_period` | All generated months fall within the invoice billing period |
+| `assert_row_count_matches_months_covered` | Each invoice produces exactly `months_covered` rows |
+| `assert_negative_mrr_only_from_credits` | Negative MRR only comes from negative invoices (no sign corruption) |
+| `assert_staging_counts_match_seeds` | All staging models have same row count as raw seeds (no rows lost or duplicated) |
+
+### 4. Primary Key Tests
 
 | Model | Column | Tests |
 |-------|--------|-------|
@@ -269,7 +300,7 @@ Proves no revenue is lost or created during amortization. Tolerance of $25 allow
 | stg_subscriptions | subscription_id | `unique`, `not_null` |
 | stg_schools | school_id | `unique`, `not_null` |
 
-### 4. Referential Integrity Tests
+### 5. Referential Integrity Tests
 
 | From | Column | To | Column |
 |------|--------|----|--------|
@@ -278,14 +309,14 @@ Proves no revenue is lost or created during amortization. Tolerance of $25 allow
 | stg_invoices | product_id | stg_products | product_id |
 | stg_subscriptions | school_id | stg_schools | school_id |
 
-### 5. Grain Validation
+### 6. Grain Validation
 
 | Model | Composite Key |
 |-------|--------------|
 | fct_mrr | `month + use_case + country` |
 | fct_mrr_movements | `month + use_case + country + mrr_movement` |
 
-### 6. Accepted Values & Not Null
+### 7. Accepted Values & Not Null
 
 - `use_case` → validates only known categories exist
 - `mrr_movement` → validates only expected movement types
@@ -304,6 +335,11 @@ Proves no revenue is lost or created during amortization. Tolerance of $25 allow
 | Logic error in MRR calculation | Unit tests |
 | GROUP BY produces wrong grain | `unique_combination_of_columns` |
 | Null in a mart column | `not_null` tests |
+| billing_end_date before billing_start_date | `assert_billing_dates_valid` |
+| Invoice produces wrong number of monthly rows | `assert_row_count_matches_months_covered` |
+| Positive invoice producing negative MRR | `assert_negative_mrr_only_from_credits` |
+| Staging model drops or duplicates rows | `assert_staging_counts_match_seeds` |
+| Generated month falls outside billing period | `assert_month_within_billing_period` |
 
 ### What Is NOT Tested (and Why)
 
@@ -311,8 +347,7 @@ Proves no revenue is lost or created during amortization. Tolerance of $25 allow
 |------------|--------|
 | Amount min/max | Credit notes make negative values valid |
 | Date range bounds | No business rule defines valid date ranges |
-| Exact reconciliation (zero tolerance) | Rounding creates small expected differences |
-| Row count assertions | Counts change as data grows — creates brittle tests |
+| Churn detection | Current model doesn't track churn (listed as future improvement) |
 
 ---
 
@@ -329,12 +364,13 @@ Shows the full data lifecycle — not just "I built a model" but "here's who rel
 ## Assumptions
 
 1. `billing_start_date` and `billing_end_date` always span at least one full month
-2. Invoices with `months_covered = 0` are excluded (prevents division by zero)
+2. Invoices with `months_covered < 1` are excluded (prevents division by zero)
 3. All amounts are in USD — no currency conversion needed
 4. Revenue is attributed to customer's country, not school's location
 5. No SCD — uses current values for country and use_case
 6. All invoiced revenue counts toward MRR regardless of subscription status
 7. Credit notes follow the same proportional amortization as regular invoices
+8. Rounding remainder is allocated to the last month to ensure exact revenue reconciliation
 
 ---
 
@@ -360,4 +396,29 @@ Shows the full data lifecycle — not just "I built a model" but "here's who rel
 | DuckDB | Local analytical database (zero infrastructure) |
 | dbt_utils | Generic test macros |
 | dbt_expectations | Additional test capabilities |
-| Git + GitHub | Version control
+| Git + GitHub | Version control |
+
+---
+
+## Sample Queries
+
+```sql
+-- Total MRR over time
+SELECT month, SUM(mrr_usd) as total_mrr
+FROM fct_mrr GROUP BY month ORDER BY month;
+
+-- MRR by movement type
+SELECT mrr_movement, SUM(mrr_change_usd) as impact
+FROM fct_mrr_movements GROUP BY mrr_movement;
+
+-- One customer's MRR journey
+SELECT month, customer_id, SUM(mrr_usd) as mrr
+FROM int_invoice_monthly_amortized
+WHERE customer_id = 'cust_00001'
+GROUP BY month, customer_id
+ORDER BY month;
+
+-- MRR by segment over time
+SELECT month, use_case, SUM(mrr_usd) as mrr
+FROM fct_mrr GROUP BY month, use_case ORDER BY month, use_case;
+```

@@ -3,6 +3,9 @@ version: 2
 models:
   - name: stg_invoices
     description: Cleaned invoices with typed columns. Includes credit notes (negative amounts).
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "billing_end_date >= billing_start_date"
     columns:
       - name: invoice_id
         data_tests:
